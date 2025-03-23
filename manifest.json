@@ -1,0 +1,10 @@
+{
+    "id": "obsidian-notes-sync",
+    "name": "Notes Sync",
+    "version": "1.0.0",
+    "minAppVersion": "0.15.0",
+    "description": "Sync notes between Obsidian and remote server",
+    "author": "Your Name",
+    "isDesktopOnly": false,
+    "main": "dist/main.js"
+} 
