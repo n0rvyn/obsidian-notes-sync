@@ -79,4 +79,125 @@
 
 .sync-errors button {
     margin-top: 1em;
+}
+
+/* Notes Sync View Styles */
+.notes-sync-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 1rem;
+}
+
+.notes-sync-tab {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-right: 0.5rem;
+}
+
+.notes-sync-tab.active {
+    border-bottom: 2px solid var(--interactive-accent);
+    font-weight: bold;
+}
+
+.sync-button {
+    margin-right: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.sync-button.cancel {
+    background-color: var(--background-modifier-error);
+    color: white;
+}
+
+.notes-sync-notice {
+    padding: 0.5rem;
+    margin-top: 1rem;
+    border-radius: 4px;
+}
+
+.notes-sync-notice.success {
+    background-color: var(--background-modifier-success);
+    color: white;
+}
+
+.notes-sync-notice.error {
+    background-color: var(--background-modifier-error);
+    color: white;
+}
+
+.notes-sync-notice.info {
+    background-color: var(--background-modifier-border);
+}
+
+.sync-status-info {
+    margin-bottom: 1rem;
+    font-style: italic;
+}
+
+.sync-error-count {
+    color: var(--text-error);
+    cursor: pointer;
+    text-decoration: underline;
+    margin-top: 0.5rem;
+}
+
+.sync-errors-modal {
+    position: absolute;
+    top: 2rem;
+    left: 1rem;
+    right: 1rem;
+    background: var(--background-primary);
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    padding: 1rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    z-index: 100;
+    max-height: 80%;
+    overflow-y: auto;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+    padding-bottom: 0.5rem;
+}
+
+.close-button {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+}
+
+.error-list {
+    padding-left: 0;
+    list-style: none;
+}
+
+.error-list li {
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.error-time {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-bottom: 0.25rem;
+}
+
+.error-message {
+    color: var(--text-error);
+    margin-bottom: 0.25rem;
+}
+
+.error-file {
+    font-size: 0.8rem;
+    font-style: italic;
 } 

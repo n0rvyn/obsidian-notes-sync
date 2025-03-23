@@ -1,6 +1,7 @@
 import { ItemView, WorkspaceLeaf } from 'obsidian';
 import NotesSyncPlugin from './main';
 import { SyncStatus } from './types';
+import { ConfirmModal } from './ConfirmModal';
 
 export const VIEW_TYPE_NOTES_SYNC = "notes-sync-view";
 
@@ -56,7 +57,7 @@ export class NotesSyncView extends ItemView {
         // Render the appropriate content based on active tab
         this.renderServiceContent(contentContainer);
 
-        // Add CSS for tabs
+        // Styles are now in styles.css, but still call this for backward compatibility
         this.addStyles();
     }
 
@@ -144,23 +145,31 @@ export class NotesSyncView extends ItemView {
         });
         fullSyncButton.addEventListener("click", async () => {
             try {
-                // Confirm full sync as it might take some time
-                if (!confirm("This will perform a full sync that ignores incremental sync data and fetch limits. It may take longer than a regular sync. Continue?")) {
-                    return;
-                }
+                // Use ConfirmModal instead of native confirm()
+                const confirmMessage = "This will perform a full sync that ignores incremental sync data and fetch limits. It may take longer than a regular sync. Continue?";
                 
-                // Try using syncManager, fall back to plugin method if needed
-                if (this.plugin.syncManager) {
-                    await this.plugin.syncManager.fullSyncFromServer();
-                } else {
-                    this.displayNotice("Full sync not supported in this version", "error");
-                    return;
-                }
+                const modal = new ConfirmModal(this.app, confirmMessage, async (confirmed) => {
+                    if (!confirmed) return;
+                    
+                    try {
+                        // Try using syncManager, fall back to plugin method if needed
+                        if (this.plugin.syncManager) {
+                            await this.plugin.syncManager.fullSyncFromServer();
+                        } else {
+                            this.displayNotice("Full sync not supported in this version", "error");
+                            return;
+                        }
+                        
+                        this.displayNotice("Full sync from server completed!", "success");
+                        this.refreshView(); // Update status after sync
+                    } catch (error) {
+                        this.displayNotice(`Full sync failed: ${error.message}`, "error");
+                    }
+                });
                 
-                this.displayNotice("Full sync from server completed!", "success");
-                this.refreshView(); // Update status after sync
+                modal.open();
             } catch (error) {
-                this.displayNotice(`Full sync failed: ${error.message}`, "error");
+                this.displayNotice(`Error: ${error.message}`, "error");
             }
         });
 
@@ -294,148 +303,27 @@ export class NotesSyncView extends ItemView {
 
     private displayNotice(message: string, type: "success" | "error" | "info") {
         const container = this.containerEl.children[1];
-        const noticeEl = container.querySelector(".notes-sync-notice");
-        if (noticeEl) {
-            noticeEl.textContent = message;
-            noticeEl.className = `notes-sync-notice ${type}`;
+        let noticeEl = container.querySelector(".notes-sync-notice");
+        
+        // If notice element doesn't exist, create it
+        if (!noticeEl) {
+            noticeEl = container.createEl("div", { cls: "notes-sync-notice" });
         }
+        
+        // Clear existing content and set new text
+        noticeEl.empty();
+        noticeEl.createSpan({ text: message });
+        
+        // Set appropriate class
+        noticeEl.className = `notes-sync-notice ${type}`;
     }
     
     private addStyles() {
-        // Add styles for tabs and content
-        const styleEl = document.getElementById('notes-sync-styles');
-        if (styleEl) styleEl.remove();
-        
-        const newStyle = document.createElement('style');
-        newStyle.id = 'notes-sync-styles';
-        newStyle.textContent = `
-            .notes-sync-tabs {
-                display: flex;
-                border-bottom: 1px solid var(--background-modifier-border);
-                margin-bottom: 1rem;
-            }
-            
-            .notes-sync-tab {
-                padding: 0.5rem 1rem;
-                cursor: pointer;
-                border-bottom: 2px solid transparent;
-                margin-right: 0.5rem;
-            }
-            
-            .notes-sync-tab.active {
-                border-bottom: 2px solid var(--interactive-accent);
-                font-weight: bold;
-            }
-            
-            .sync-button {
-                margin-right: 0.5rem;
-                margin-bottom: 1rem;
-            }
-            
-            .sync-button.cancel {
-                background-color: var(--background-modifier-error);
-                color: white;
-            }
-            
-            .notes-sync-notice {
-                padding: 0.5rem;
-                margin-top: 1rem;
-                border-radius: 4px;
-            }
-            
-            .notes-sync-notice.success {
-                background-color: var(--background-modifier-success);
-                color: white;
-            }
-            
-            .notes-sync-notice.error {
-                background-color: var(--background-modifier-error);
-                color: white;
-            }
-            
-            .notes-sync-notice.info {
-                background-color: var(--background-modifier-border);
-            }
-            
-            .sync-status-info {
-                margin-bottom: 1rem;
-                font-style: italic;
-            }
-            
-            .sync-error-count {
-                color: var(--text-error);
-                cursor: pointer;
-                text-decoration: underline;
-                margin-top: 0.5rem;
-            }
-            
-            .sync-errors-modal {
-                position: absolute;
-                top: 2rem;
-                left: 1rem;
-                right: 1rem;
-                background: var(--background-primary);
-                border: 1px solid var(--background-modifier-border);
-                border-radius: 4px;
-                padding: 1rem;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-                z-index: 100;
-                max-height: 80%;
-                overflow-y: auto;
-            }
-            
-            .modal-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 1rem;
-                border-bottom: 1px solid var(--background-modifier-border);
-                padding-bottom: 0.5rem;
-            }
-            
-            .close-button {
-                background: none;
-                border: none;
-                font-size: 1.5rem;
-                cursor: pointer;
-                padding: 0;
-                line-height: 1;
-            }
-            
-            .error-list {
-                padding-left: 0;
-                list-style: none;
-            }
-            
-            .error-list li {
-                margin-bottom: 1rem;
-                padding-bottom: 0.5rem;
-                border-bottom: 1px solid var(--background-modifier-border);
-            }
-            
-            .error-time {
-                font-size: 0.8rem;
-                color: var(--text-muted);
-                margin-bottom: 0.25rem;
-            }
-            
-            .error-message {
-                color: var(--text-error);
-                margin-bottom: 0.25rem;
-            }
-            
-            .error-file {
-                font-size: 0.8rem;
-                font-style: italic;
-            }
-        `;
-        
-        document.head.appendChild(newStyle);
+        // This method is no longer needed - styles are now in styles.css
+        // No need to add styles dynamically
     }
 
     async onClose() {
         // Clean up any resources if needed
-        const styleEl = document.getElementById('notes-sync-styles');
-        if (styleEl) styleEl.remove();
     }
 } 
