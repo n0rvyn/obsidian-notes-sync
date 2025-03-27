@@ -1,10 +1,11 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, WorkspaceLeaf, Modal } from "obsidian";
+import { App, Notice, Plugin, TFile, WorkspaceLeaf, Modal } from "obsidian";
 import { NotesSyncView, VIEW_TYPE_NOTES_SYNC } from "./ChatView";
 import { FrontMatter, NotesSyncSettings, RemoteNote } from "./types";
 import "./styles.css";
 import { SyncManager } from './SyncManager';
 import * as yaml from 'js-yaml';
 import { ConfirmModal } from './ConfirmModal';
+import { NotesSyncSettingTab } from './NotesSyncSettingTab';
 
 const DEFAULT_SETTINGS: NotesSyncSettings = {
     bearerToken: '',
@@ -38,9 +39,12 @@ const DEFAULT_SETTINGS: NotesSyncSettings = {
 export default class NotesSyncPlugin extends Plugin {
     settings: NotesSyncSettings;
     syncManager: SyncManager;
-    autoSyncInterval: number | null = null;
-    statusBar: HTMLElement | null = null;
-    statusBarInterval: number | null = null;
+    private autoSyncInterval: number | null = null;
+    private autoPullInterval: number | null = null;
+    private autoPushInterval: number | null = null;
+    private statusBar: HTMLElement | null = null;
+    private statusBarInterval: number | null = null;
+    settingTab: NotesSyncSettingTab;
 
     async onload() {
         console.log("Loading NotesSyncPlugin...");
@@ -54,7 +58,8 @@ export default class NotesSyncPlugin extends Plugin {
         );
 
         // Add settings tab
-        this.addSettingTab(new NotesSyncSettingTab(this.app, this));
+        this.settingTab = new NotesSyncSettingTab(this.app, this);
+        this.addSettingTab(this.settingTab);
 
         // Add ribbon icon
         this.addRibbonIcon("sync", "Notes Sync", () => {
@@ -387,343 +392,6 @@ export default class NotesSyncPlugin extends Plugin {
         if (!folderExists) {
             await this.app.vault.createFolder(folderPath);
             new Notice(`Created sync folder: ${folderPath}`);
-        }
-    }
-}
-
-class NotesSyncSettingTab extends PluginSettingTab {
-    plugin: NotesSyncPlugin;
-
-    constructor(app: App, plugin: NotesSyncPlugin) {
-        super(app, plugin);
-        this.plugin = plugin;
-    }
-
-    display(): void {
-        const { containerEl } = this;
-
-        containerEl.empty();
-
-        new Setting(containerEl)
-            .setName("Sync Service")
-            .setDesc("Choose which service to sync with")
-            .addDropdown(dropdown => dropdown
-                .addOption("luojilab", "LuojiLab")
-                .addOption("flomo", "Flomo")
-                .setValue(this.plugin.settings.syncService)
-                .onChange(async (value: "luojilab" | "flomo") => {
-                    this.plugin.settings.syncService = value;
-                    await this.plugin.saveSettings();
-                    // Update the sync service
-                    this.plugin.syncManager.updateSyncService();
-                    // Re-render settings to show/hide service-specific settings
-                    this.display();
-                }));
-
-        // Add common settings section
-        containerEl.createEl("h3", { text: "Common Settings" });
-        
-        new Setting(containerEl)
-            .setName("Auto Sync")
-            .setDesc("Automatically sync notes at regular intervals")
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.autoSync)
-                .onChange(async (value) => {
-                    this.plugin.settings.autoSync = value;
-                    await this.plugin.saveSettings();
-                }));
-        
-        new Setting(containerEl)
-            .setName("Auto Sync Interval")
-            .setDesc("How often to sync notes (in minutes)")
-            .addText(text => text
-                .setPlaceholder("30")
-                .setValue(String(this.plugin.settings.autoSyncInterval))
-                .onChange(async (value) => {
-                    const interval = parseInt(value);
-                    if (!isNaN(interval) && interval > 0) {
-                        this.plugin.settings.autoSyncInterval = interval;
-                        await this.plugin.saveSettings();
-                    }
-                }));
-        
-        new Setting(containerEl)
-            .setName("Conflict Resolution")
-            .setDesc("How to handle conflicts between local and remote notes")
-            .addDropdown(dropdown => dropdown
-                .addOption("ask", "Ask me")
-                .addOption("local", "Keep local changes")
-                .addOption("remote", "Use remote changes")
-                .setValue(this.plugin.settings.conflictResolution)
-                .onChange(async (value: "ask" | "local" | "remote") => {
-                    this.plugin.settings.conflictResolution = value;
-                    await this.plugin.saveSettings();
-                }));
-        
-        new Setting(containerEl)
-            .setName("Retry Attempts")
-            .setDesc("Number of times to retry failed sync operations")
-            .addText(text => text
-                .setPlaceholder("3")
-                .setValue(String(this.plugin.settings.retryAttempts))
-                .onChange(async (value) => {
-                    const attempts = parseInt(value);
-                    if (!isNaN(attempts) && attempts > 0) {
-                        this.plugin.settings.retryAttempts = attempts;
-                        await this.plugin.saveSettings();
-                    }
-                }));
-
-        // Add a heading for LLM settings
-        containerEl.createEl("h3", { text: "LLM Settings for Title Generation" });
-        
-        new Setting(containerEl)
-            .setName("Use LLM for Title Generation")
-            .setDesc("Generate titles for notes using a Language Model")
-            .addToggle(toggle => toggle
-                .setValue(this.plugin.settings.useLlmForTitles)
-                .onChange(async (value) => {
-                    this.plugin.settings.useLlmForTitles = value;
-                    await this.plugin.saveSettings();
-                }));
-        
-        new Setting(containerEl)
-            .setName("LLM Type")
-            .setDesc("The type of LLM to use for title generation")
-            .addDropdown(dropdown => dropdown
-                .addOption("", "None")
-                .addOption("ZhipuAI", "ZhipuAI")
-                .addOption("Tongyi", "Tongyi")
-                .addOption("OpenAI", "OpenAI")
-                .setValue(this.plugin.settings.llmType)
-                .onChange(async (value) => {
-                    this.plugin.settings.llmType = value as any;
-                    await this.plugin.saveSettings();
-                }));
-        
-        new Setting(containerEl)
-            .setName("LLM Model")
-            .setDesc("The model to use for title generation")
-            .addText(text => text
-                .setPlaceholder("Model name")
-                .setValue(this.plugin.settings.llmModel)
-                .onChange(async (value) => {
-                    this.plugin.settings.llmModel = value;
-                    await this.plugin.saveSettings();
-                }));
-        
-        new Setting(containerEl)
-            .setName("LLM API Key")
-            .setDesc("API key for the selected LLM service")
-            .addText(text => text
-                .setPlaceholder("API key")
-                .setValue(this.plugin.settings.llmApiKey)
-                .onChange(async (value) => {
-                    this.plugin.settings.llmApiKey = value;
-                    await this.plugin.saveSettings();
-                }));
-
-        // Service-specific settings
-        if (this.plugin.settings.syncService === 'luojilab') {
-            // LuojiLab settings
-            containerEl.createEl("h3", { text: "LuojiLab Settings" });
-            
-            new Setting(containerEl)
-                .setName("Bearer Token")
-                .setDesc("Your authentication token for the LuojiLab notes API")
-                .addText(text => text
-                    .setPlaceholder("Enter your token")
-                    .setValue(this.plugin.settings.bearerToken)
-                    .onChange(async (value) => {
-                        this.plugin.settings.bearerToken = value;
-                        await this.plugin.saveSettings();
-                    }));
-
-            new Setting(containerEl)
-                .setName("API Base URL")
-                .setDesc("Base URL for the LuojiLab notes API (without trailing slash)")
-                .addText(text => text
-                    .setPlaceholder("https://example.com/api")
-                    .setValue(this.plugin.settings.apiBaseUrl)
-                    .onChange(async (value) => {
-                        this.plugin.settings.apiBaseUrl = value.replace(/\/$/, ''); // Remove trailing slash if present
-                        await this.plugin.saveSettings();
-                    }));
-
-            new Setting(containerEl)
-                .setName("Sync Folder")
-                .setDesc("The folder where LuojiLab synced notes will be stored")
-                .addText(text => text
-                    .setPlaceholder("notes")
-                    .setValue(this.plugin.settings.syncFolder)
-                    .onChange(async (value) => {
-                        this.plugin.settings.syncFolder = value;
-                        await this.plugin.saveSettings();
-                    }));
-
-            new Setting(containerEl)
-                .setName("Note Fetch Limit")
-                .setDesc("Maximum number of notes to fetch per sync (0 for no limit)")
-                .addText(text => text
-                    .setPlaceholder("20")
-                    .setValue(String(this.plugin.settings.noteFetchLimit))
-                    .onChange(async (value) => {
-                        const limit = parseInt(value);
-                        if (!isNaN(limit) && limit >= 0) {
-                            this.plugin.settings.noteFetchLimit = limit;
-                            await this.plugin.saveSettings();
-                        }
-                    }));
-        } else if (this.plugin.settings.syncService === 'flomo') {
-            // Flomo settings
-            containerEl.createEl("h3", { text: "Flomo Settings" });
-            
-            new Setting(containerEl)
-                .setName("Flomo API Token")
-                .setDesc("Your authentication token for the Flomo API")
-                .addText(text => text
-                    .setPlaceholder("Enter your Flomo token")
-                    .setValue(this.plugin.settings.flomoApiToken)
-                    .onChange(async (value) => {
-                        this.plugin.settings.flomoApiToken = value;
-                        await this.plugin.saveSettings();
-                    }));
-
-            new Setting(containerEl)
-                .setName("Flomo Sync Directory")
-                .setDesc("The folder where Flomo synced notes will be stored")
-                .addText(text => text
-                    .setPlaceholder("flomo-notes")
-                    .setValue(this.plugin.settings.flomoSyncDirectory)
-                    .onChange(async (value) => {
-                        this.plugin.settings.flomoSyncDirectory = value;
-                        await this.plugin.saveSettings();
-                    }));
-
-            new Setting(containerEl)
-                .setName("Flomo Fetch Limit")
-                .setDesc("Maximum number of memos to fetch per sync")
-                .addText(text => text
-                    .setPlaceholder("200")
-                    .setValue(String(this.plugin.settings.flomoFetchLimit))
-                    .onChange(async (value) => {
-                        const limit = parseInt(value);
-                        if (!isNaN(limit) && limit > 0) {
-                            this.plugin.settings.flomoFetchLimit = limit;
-                            await this.plugin.saveSettings();
-                        }
-                    }));
-
-            new Setting(containerEl)
-                .setName("Flomo Fetch Order")
-                .setDesc("Order in which to fetch Flomo memos")
-                .addDropdown(dropdown => dropdown
-                    .addOption("latest", "Latest First")
-                    .addOption("oldest", "Oldest First")
-                    .setValue(this.plugin.settings.flomoFetchOrder)
-                    .onChange(async (value: "latest" | "oldest") => {
-                        this.plugin.settings.flomoFetchOrder = value;
-                        await this.plugin.saveSettings();
-                    }));
-
-            // LLM settings for Flomo
-            containerEl.createEl("h4", { text: "Flomo LLM Settings (Optional)" });
-            
-            new Setting(containerEl)
-                .setName("LLM Type")
-                .setDesc("The type of language model to use for generating note titles")
-                .addDropdown(dropdown => dropdown
-                    .addOption("", "None")
-                    .addOption("ZhipuAI", "ZhipuAI")
-                    .addOption("Tongyi", "Tongyi")
-                    .setValue(this.plugin.settings.flomoLlmType)
-                    .onChange(async (value: "" | "ZhipuAI" | "Tongyi") => {
-                        this.plugin.settings.flomoLlmType = value;
-                        await this.plugin.saveSettings();
-                        // Refresh to show/hide model field based on selection
-                        this.display();
-                    }));
-
-            // Only show model and API key if LLM type is selected
-            if (this.plugin.settings.flomoLlmType) {
-                new Setting(containerEl)
-                    .setName("LLM Model")
-                    .setDesc("The specific model to use")
-                    .addText(text => text
-                        .setPlaceholder("Enter model name")
-                        .setValue(this.plugin.settings.flomoLlmModel)
-                        .onChange(async (value) => {
-                            this.plugin.settings.flomoLlmModel = value;
-                            await this.plugin.saveSettings();
-                        }));
-
-                new Setting(containerEl)
-                    .setName("LLM API Key")
-                    .setDesc("API key for the selected language model")
-                    .addText(text => text
-                        .setPlaceholder("Enter API key")
-                        .setValue(this.plugin.settings.flomoLlmApiKey)
-                        .onChange(async (value) => {
-                            this.plugin.settings.flomoLlmApiKey = value;
-                            await this.plugin.saveSettings();
-                        }));
-            }
-        }
-
-        // Add API test connection button for any service
-        new Setting(containerEl)
-            .setName("API Connection")
-            .setDesc("Test your API connection")
-            .addButton(button => button
-                .setButtonText("Test Connection")
-                .onClick(async () => {
-                    button.setButtonText("Testing...");
-                    button.setDisabled(true);
-                    
-                    try {
-                        const result = await this.plugin.syncManager.testApiConnection();
-                        if (result.success) {
-                            new Notice(result.message);
-                        } else {
-                            new Notice("Connection failed: " + result.message);
-                        }
-                    } catch (err) {
-                        new Notice("Error testing connection: " + err.message);
-                    }
-                    
-                    button.setButtonText("Test Connection");
-                    button.setDisabled(false);
-                }));
-
-        // Add status information
-        const statusInfo = this.plugin.syncManager.getSyncStatus();
-        const statusContainer = containerEl.createDiv('sync-status');
-        statusContainer.createEl('h3', { text: 'Sync Status' });
-        
-        if (statusInfo.inProgress) {
-            statusContainer.createEl('p', { text: 'Sync in progress...' });
-        } else if (statusInfo.lastSync > 0) {
-            const lastSyncDate = new Date(statusInfo.lastSync).toLocaleString();
-            statusContainer.createEl('p', { text: `Last synced: ${lastSyncDate}` });
-        }
-
-        if (statusInfo.errors.length > 0) {
-            const errorList = statusContainer.createEl('div', { cls: 'sync-errors' });
-            errorList.createEl('h4', { text: 'Recent Errors' });
-            const ul = errorList.createEl('ul');
-            statusInfo.errors.slice(-5).forEach(error => {
-                const li = ul.createEl('li');
-                li.createEl('strong', { text: new Date(error.timestamp).toLocaleString() });
-                li.createEl('span', { text: `: ${error.error} (${error.file})` });
-            });
-
-            new Setting(statusContainer)
-                .addButton(button => button
-                    .setButtonText('Clear Errors')
-                    .onClick(() => {
-                        this.plugin.syncManager.clearErrors();
-                        this.display();
-                    }));
         }
     }
 } 
